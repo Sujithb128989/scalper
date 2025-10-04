@@ -1,73 +1,52 @@
+import time
 import MetaTrader5 as mt5
-from mt5_connector import initialize_mt5, shutdown_mt5, get_symbol_info
-from config import MAGIC_NUMBER, FALLBACK_STOP_DISTANCE_UNITS
+from mt5_connector import initialize_mt5, shutdown_mt5
+from trader import open_trade, close_trade
+from config import MAGIC_NUMBER
 
-def run_test_trade():
+def run_round_trip_test():
     """
-    Connects to MT5 and places a single test trade. It uses the broker's
-    minimum stop distance, with a configurable fallback if the broker reports zero.
+    Connects to MT5 and performs a full round-trip test:
+    1. Opens a trade.
+    2. Immediately closes the trade.
     """
-    print("--- Running Test Script ---")
+    print("--- Running Round-Trip Test Script ---")
     if not initialize_mt5():
         print("[TEST FAILED] Could not initialize MT5 connection.")
         return
 
     symbol = "BTCUSDm"
-    print(f"Attempting to place a test 'buy' trade for {symbol}...")
 
-    symbol_info = get_symbol_info(symbol)
-    if symbol_info is None:
-        print(f"[TEST FAILED] Could not get symbol info for {symbol}.")
+    # --- Step 1: Open the trade ---
+    open_result = open_trade('buy', symbol)
+
+    if open_result is None or open_result.retcode != mt5.TRADE_RETCODE_DONE:
+        print("[TEST FAILED] Could not open a position to test closing.")
         shutdown_mt5()
         return
 
-    # --- Determine a valid stop distance for the test trade ---
-    lot_size = symbol_info.volume_min
-    price = mt5.symbol_info_tick(symbol).ask
-    point = symbol_info.point
-    broker_min_stops = symbol_info.trade_stops_level
+    print(f"[TEST INFO] Successfully opened position #{open_result.order}. Waiting 2 seconds before closing...")
+    time.sleep(2) # Wait a moment to ensure the position is fully registered on the server
 
-    print(f"Broker's minimum stop distance for {symbol}: {broker_min_stops} points.")
+    # --- Step 2: Close the trade ---
+    # Fetch the position details to pass to the close function
+    positions = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
+    if positions is None or len(positions) == 0:
+        print(f"[TEST FAILED] Could not find the newly created position for {symbol}.")
+        shutdown_mt5()
+        return
 
-    # Safeguard: If broker reports 0, use our configurable fallback value.
-    if broker_min_stops == 0:
-        distance_for_test = FALLBACK_STOP_DISTANCE_UNITS
-        print(f"Broker reported 0, using configured fallback distance of {distance_for_test} points.")
+    position_to_close = positions[0]
+    close_result = close_trade(position_to_close)
+
+    if close_result and close_result.retcode == mt5.TRADE_RETCODE_DONE:
+        print("[TEST SUCCESS] Successfully opened and closed a trade.")
     else:
-        distance_for_test = broker_min_stops
-
-    # Set TP/SL using the determined valid distance
-    tp = price + distance_for_test * point
-    sl = price - distance_for_test * point
-
-    print(f"Test trade details: Price={price:.5f}, TP={tp:.5f}, SL={sl:.5f}, Lot={lot_size}")
-
-    # --- Prepare and send the trade request ---
-    request = {
-        "action": mt5.TRADE_ACTION_DEAL,
-        "symbol": symbol,
-        "volume": lot_size,
-        "type": mt5.ORDER_TYPE_BUY,
-        "price": price,
-        "sl": sl,
-        "tp": tp,
-        "magic": MAGIC_NUMBER,
-        "comment": "test script trade",
-        "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
-    }
-
-    result = mt5.order_send(request)
-
-    # --- Check result ---
-    if result.retcode != mt5.TRADE_RETCODE_DONE:
-        print(f"[TEST FAILED] Order send failed. Retcode={result.retcode}, Comment={result.comment}")
-    else:
-        print(f"[TEST SUCCESS] Order successfully sent. Order ID: {result.order}")
+        print("[TEST FAILED] The closing part of the test failed.")
 
     # --- Clean up ---
     shutdown_mt5()
     print("--- Test Script Finished ---")
 
 if __name__ == "__main__":
-    run_test_trade()
+    run_round_trip_test()
