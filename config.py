@@ -16,8 +16,8 @@ SYMBOLS = {
 # The maximum number of simultaneous trades the bot can have open.
 MAX_TRADES = 10
 
-# The distance in points for your Stop Loss and Take Profit.
-# This will be used to programmatically close the trade.
+# The Take Profit and Stop Loss target in your account's currency (e.g., USD).
+# The bot will programmatically close a trade when its P/L hits this value.
 TP_SL_UNITS = 50
 
 # --- Other Settings ---

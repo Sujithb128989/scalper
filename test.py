@@ -8,7 +8,7 @@ def run_live_monitoring_test():
     """
     Connects to MT5 and performs a live monitoring test:
     1. Opens MAX_TRADES number of trades.
-    2. Enters a loop to monitor and close them based on TP/SL.
+    2. Enters a loop to monitor and close them based on TP/SL in account currency.
     3. The test completes when all initial trades have been closed.
     """
     print(f"--- Running Live Monitoring Test Script (Target: {MAX_TRADES} trades) ---")
@@ -33,7 +33,7 @@ def run_live_monitoring_test():
         return
 
     print(f"Successfully opened {len(initial_positions)} trades. Entering live monitoring mode...")
-    print("This test will run until all positions are closed by hitting the +/- {TP_SL_UNITS} unit target.")
+    print(f"This test will run until all positions are closed by hitting the +/- ${TP_SL_UNITS} target.")
 
     # --- Step 3: Monitor until all trades are closed ---
     try:
@@ -50,20 +50,15 @@ def run_live_monitoring_test():
                 break
 
             print(f"--- Monitoring {len(positions)} open positions ---")
-            point = get_symbol_info(symbol).point
 
             for pos in list(positions):
-                if pos.type == mt5.ORDER_TYPE_BUY:
-                    current_price = mt5.symbol_info_tick(symbol).bid
-                    profit_in_points = (current_price - pos.price_open) / point
-                else: # pos.type == mt5.ORDER_TYPE_SELL
-                    current_price = mt5.symbol_info_tick(symbol).ask
-                    profit_in_points = (pos.price_open - current_price) / point
+                # Use pos.profit to get P/L directly in account currency
+                profit_in_currency = pos.profit
 
-                print(f"[MONITOR] Position #{pos.ticket}, P/L: {profit_in_points:.2f} points")
+                print(f"[MONITOR] Position #{pos.ticket}, P/L: ${profit_in_currency:.2f}")
 
-                if abs(profit_in_points) >= TP_SL_UNITS:
-                    print(f"[TARGET HIT] Position #{pos.ticket} P/L is {profit_in_points:.2f}. Closing trade.")
+                if profit_in_currency >= TP_SL_UNITS or profit_in_currency <= -TP_SL_UNITS:
+                    print(f"[TARGET HIT] Position #{pos.ticket} P/L is ${profit_in_currency:.2f}. Closing trade.")
                     close_trade(pos)
 
             time.sleep(1) # Loop every second for active monitoring

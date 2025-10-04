@@ -25,6 +25,7 @@ def main():
 
     selected_symbol = SYMBOLS[selected_key]
     print(f"Trading {selected_symbol} with up to {MAX_TRADES} simultaneous trades...")
+    print(f"TP/SL target is set to ${TP_SL_UNITS} per trade.")
     print("Bot is running. Press Ctrl+C to stop.")
 
     # --- Main trading loop ---
@@ -38,23 +39,17 @@ def main():
                 continue
 
             if len(positions) > 0:
-                point = get_symbol_info(selected_symbol).point
                 for pos in list(positions):
-                    if pos.type == mt5.ORDER_TYPE_BUY:
-                        current_price = mt5.symbol_info_tick(selected_symbol).bid
-                        profit_in_points = (current_price - pos.price_open) / point
-                    else: # pos.type == mt5.ORDER_TYPE_SELL
-                        current_price = mt5.symbol_info_tick(selected_symbol).ask
-                        profit_in_points = (pos.price_open - current_price) / point
+                    # Use pos.profit to get P/L directly in account currency
+                    profit_in_currency = pos.profit
 
-                    print(f"[MONITOR] Position #{pos.ticket}, P/L: {profit_in_points:.2f} points")
+                    print(f"[MONITOR] Position #{pos.ticket}, P/L: ${profit_in_currency:.2f}")
 
-                    if profit_in_points >= TP_SL_UNITS or profit_in_points <= -TP_SL_UNITS:
-                        print(f"[TARGET HIT] Position #{pos.ticket} P/L is {profit_in_points:.2f}. Closing trade.")
+                    if profit_in_currency >= TP_SL_UNITS or profit_in_currency <= -TP_SL_UNITS:
+                        print(f"[TARGET HIT] Position #{pos.ticket} P/L is ${profit_in_currency:.2f}. Closing trade.")
                         close_trade(pos)
 
             # --- 2. Check for new trade opportunities ---
-            # Re-fetch positions to get the most current count after potential closing
             num_open_trades = len(mt5.positions_get(symbol=selected_symbol, magic=MAGIC_NUMBER))
             print(f"Bot status: {num_open_trades}/{MAX_TRADES} open positions.")
 
