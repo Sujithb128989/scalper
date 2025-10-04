@@ -12,7 +12,10 @@ SYMBOLS = {
     "2": "XAUUSD"
 }
 
-# --- Stop Loss and Take Profit ---
+# --- Trade Management ---
+# The maximum number of simultaneous trades the bot can have open.
+MAX_TRADES = 10
+
 # The distance in points for your Stop Loss and Take Profit.
 # This will be used to programmatically close the trade.
 TP_SL_UNITS = 50
