@@ -18,8 +18,8 @@ TP_SL_UNITS = 50
 
 # ** IMPORTANT **
 # Fallback for when the broker reports an invalid minimum stop distance (0).
-# If you still get 'Invalid stops' errors, INCREASE this value.
-FALLBACK_STOP_DISTANCE_UNITS = 50
+# If you still get 'Invalid stops' errors, INCREASE this value. A high value like 2000 is safe for BTC.
+FALLBACK_STOP_DISTANCE_UNITS = 2000
 
 # --- Other Settings ---
 MAGIC_NUMBER = 12345
