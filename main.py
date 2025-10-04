@@ -14,17 +14,16 @@ def main():
 
     # --- User selects instrument ---
     print("Please select the instrument to trade:")
-    for key in SYMBOLS.keys():
-        print(f"- {key}")
+    for key, value in SYMBOLS.items():
+        print(f"{key}: {value}")
 
-    selected_symbol = ""
-    while selected_symbol not in SYMBOLS.values():
-        user_input = input("Enter symbol: ").strip().upper()
-        if user_input in SYMBOLS:
-            selected_symbol = SYMBOLS[user_input]
-        else:
-            print("Invalid symbol. Please choose from the list.")
+    selected_key = ""
+    while selected_key not in SYMBOLS:
+        selected_key = input("Enter the number for the symbol: ").strip()
+        if selected_key not in SYMBOLS:
+            print("Invalid selection. Please choose a valid number.")
 
+    selected_symbol = SYMBOLS[selected_key]
     print(f"Trading {selected_symbol}...")
     print("Bot is running. Press Ctrl+C to stop.")
 
@@ -36,7 +35,7 @@ def main():
             if positions is None or len(positions) == 0:
                 print("No open positions. Checking for new trade signals...")
 
-                # --- Check for signals ---
+                # --- Check for signals (5m first, then 1m) ---
                 signal_5m = check_5m_strategy(selected_symbol)
                 if signal_5m:
                     print(f"5m Signal found: {signal_5m}. Placing trade.")
@@ -51,9 +50,10 @@ def main():
             else:
                 print(f"An open position for {selected_symbol} already exists. Waiting...")
 
-            # --- Wait for the next 1-minute candle ---
+            # --- Wait for the start of the next 1-minute candle ---
             print("Waiting for the next candle...")
-            time.sleep(60 - time.time() % 60)
+            time_to_sleep = 60 - (time.time() % 60)
+            time.sleep(time_to_sleep)
 
     except KeyboardInterrupt:
         print("\nBot stopped by user.")

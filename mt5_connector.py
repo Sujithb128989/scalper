@@ -1,11 +1,20 @@
 import MetaTrader5 as mt5
+from config import MT5_ACCOUNT, MT5_PASSWORD, MT5_SERVER
 
 def initialize_mt5():
-    """Initializes the connection to the MetaTrader 5 terminal."""
-    if not mt5.initialize():
+    """
+    Initializes the connection to the MetaTrader 5 terminal and logs in.
+    """
+    # Initialize the MT5 terminal connection
+    if not mt5.initialize(
+        login=MT5_ACCOUNT,
+        password=MT5_PASSWORD,
+        server=MT5_SERVER
+    ):
         print(f"initialize() failed, error code = {mt5.last_error()}")
         return False
-    print("MT5 connection initialized successfully.")
+
+    print("MT5 connection initialized and logged in successfully.")
     return True
 
 def shutdown_mt5():
@@ -18,7 +27,6 @@ def get_symbol_info(symbol):
     # Ensure symbol is available in MarketWatch
     if not mt5.symbol_select(symbol, True):
         print(f"Failed to select {symbol} in MarketWatch, error code = {mt5.last_error()}")
-        # We can still try to get info, maybe it's already selected
 
     info = mt5.symbol_info(symbol)
     if info is None:
