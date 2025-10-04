@@ -5,14 +5,7 @@ from mt5_connector import get_symbol_info
 def open_trade(action, symbol):
     """
     Opens a trade with the specified action ('buy' or 'sell').
-    Lot size is dynamically fetched based on the minimum allowed volume.
-
-    Args:
-        action (str): The trade direction, 'buy' or 'sell'.
-        symbol (str): The symbol to trade.
-
-    Returns:
-        The result of the order_send operation.
+    Dynamically adjusts SL/TP to meet broker's minimum stop level.
     """
     print(f"Attempting to open a {action} trade for {symbol}...")
 
@@ -21,30 +14,36 @@ def open_trade(action, symbol):
         print(f"Trade failed: Could not get symbol info for {symbol}.")
         return None
 
-    # Dynamically fetch the minimum lot size
+    # --- Dynamically fetch instrument settings ---
     lot_size = symbol_info.volume_min
-    print(f"Using minimum lot size: {lot_size}")
-
-    # Determine the correct price based on the action
-    price = mt5.symbol_info_tick(symbol).ask if action == 'buy' else mt5.symbol_info_tick(symbol).bid
     point = symbol_info.point
+    price = mt5.symbol_info_tick(symbol).ask if action == 'buy' else mt5.symbol_info_tick(symbol).bid
 
-    # Set SL and TP based on a fixed unit distance from the entry price
+    # --- Ensure SL/TP distance meets broker's minimum requirement ---
+    stops_level = symbol_info.trade_stops_level
+    distance_units = TP_SL_UNITS
+
+    if distance_units < stops_level:
+        print(f"[WARNING] Configured TP/SL of {distance_units} units is less than broker's minimum of {stops_level} units.")
+        print(f"Adjusting to use the broker's minimum distance.")
+        distance_units = stops_level
+
+    # --- Set SL and TP based on the adjusted distance ---
     if action == 'buy':
         trade_type = mt5.ORDER_TYPE_BUY
-        sl = price - TP_SL_UNITS * point
-        tp = price + TP_SL_UNITS * point
+        sl = price - distance_units * point
+        tp = price + distance_units * point
     elif action == 'sell':
         trade_type = mt5.ORDER_TYPE_SELL
-        sl = price + TP_SL_UNITS * point
-        tp = price - TP_SL_UNITS * point
+        sl = price + distance_units * point
+        tp = price - distance_units * point
     else:
         print(f"Invalid action: {action}")
         return None
 
-    print(f"Price: {price}, SL: {sl}, TP: {tp}")
+    print(f"Trade Details: Lot={lot_size}, Price={price:.5f}, SL={sl:.5f}, TP={tp:.5f}")
 
-    # Build the trade request
+    # --- Build and send the trade request ---
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -59,7 +58,6 @@ def open_trade(action, symbol):
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
 
-    # Send the trade request
     result = mt5.order_send(request)
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         print(f"Order send failed, retcode={result.retcode}, comment={result.comment}")

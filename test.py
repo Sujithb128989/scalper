@@ -4,7 +4,8 @@ from config import MAGIC_NUMBER
 
 def run_test_trade():
     """
-    Connects to MT5 and places a single test trade.
+    Connects to MT5 and places a single test trade using the broker's
+    minimum required stop distance to ensure validity.
     """
     print("--- Running Test Script ---")
     if not initialize_mt5():
@@ -12,8 +13,6 @@ def run_test_trade():
         return
 
     symbol = "BTCUSDm"
-    test_tp_sl_units = 5  # Using a small 5-unit TP/SL for the test
-
     print(f"Attempting to place a test 'buy' trade for {symbol}...")
 
     symbol_info = get_symbol_info(symbol)
@@ -22,16 +21,21 @@ def run_test_trade():
         shutdown_mt5()
         return
 
-    # --- Prepare and send the trade ---
+    # --- Use broker's minimum stop distance for the test trade ---
     lot_size = symbol_info.volume_min
     price = mt5.symbol_info_tick(symbol).ask
     point = symbol_info.point
+    stops_level = symbol_info.trade_stops_level
 
-    tp = price + test_tp_sl_units * point
-    sl = price - test_tp_sl_units * point
+    print(f"Broker's minimum stop distance for {symbol}: {stops_level} points.")
+
+    # Set TP/SL using the required minimum distance to ensure the trade is valid
+    tp = price + stops_level * point
+    sl = price - stops_level * point
 
     print(f"Test trade details: Price={price:.5f}, TP={tp:.5f}, SL={sl:.5f}, Lot={lot_size}")
 
+    # --- Prepare and send the trade request ---
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -57,7 +61,6 @@ def run_test_trade():
     # --- Clean up ---
     shutdown_mt5()
     print("--- Test Script Finished ---")
-
 
 if __name__ == "__main__":
     run_test_trade()
