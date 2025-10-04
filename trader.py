@@ -23,7 +23,8 @@ def open_trade(action, symbol):
     stops_level = symbol_info.trade_stops_level
     distance_units = TP_SL_UNITS
 
-    if distance_units < stops_level:
+    # Only use the broker's stop level if it's a valid, non-zero value and greater than our config.
+    if stops_level > 0 and distance_units < stops_level:
         print(f"[WARNING] Configured TP/SL of {distance_units} units is less than broker's minimum of {stops_level} units.")
         print(f"Adjusting to use the broker's minimum distance.")
         distance_units = stops_level
