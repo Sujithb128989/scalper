@@ -1,11 +1,11 @@
 import MetaTrader5 as mt5
-from config import MAGIC_NUMBER
+from config import MAGIC_NUMBER, LOT_SIZE
 from mt5_connector import get_symbol_info
 
 def open_trade(action, symbol):
     """
     Opens a trade with the specified action ('buy' or 'sell')
-    without setting SL or TP levels.
+    using the lot size defined in the config.
     """
     print(f"Attempting to open a {action} trade for {symbol}...")
 
@@ -14,7 +14,8 @@ def open_trade(action, symbol):
         print(f"Trade failed: Could not get symbol info for {symbol}.")
         return None
 
-    lot_size = symbol_info.volume_min
+    # Use the lot size from the config file
+    lot_size = LOT_SIZE
     price = mt5.symbol_info_tick(symbol).ask if action == 'buy' else mt5.symbol_info_tick(symbol).bid
     trade_type = mt5.ORDER_TYPE_BUY if action == 'buy' else mt5.ORDER_TYPE_SELL
 

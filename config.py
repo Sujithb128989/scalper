@@ -13,6 +13,9 @@ SYMBOLS = {
 }
 
 # --- Trade Management ---
+# The volume for each trade.
+LOT_SIZE = 1.0
+
 # The maximum number of simultaneous trades the bot can have open.
 MAX_TRADES = 10
 
