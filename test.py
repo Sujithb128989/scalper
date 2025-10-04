@@ -1,11 +1,11 @@
 import MetaTrader5 as mt5
 from mt5_connector import initialize_mt5, shutdown_mt5, get_symbol_info
-from config import MAGIC_NUMBER
+from config import MAGIC_NUMBER, FALLBACK_STOP_DISTANCE_UNITS
 
 def run_test_trade():
     """
     Connects to MT5 and places a single test trade. It uses the broker's
-    minimum stop distance, with a safe fallback if the broker reports zero.
+    minimum stop distance, with a configurable fallback if the broker reports zero.
     """
     print("--- Running Test Script ---")
     if not initialize_mt5():
@@ -25,16 +25,16 @@ def run_test_trade():
     lot_size = symbol_info.volume_min
     price = mt5.symbol_info_tick(symbol).ask
     point = symbol_info.point
-    stops_level = symbol_info.trade_stops_level
+    broker_min_stops = symbol_info.trade_stops_level
 
-    print(f"Broker's minimum stop distance for {symbol}: {stops_level} points.")
+    print(f"Broker's minimum stop distance for {symbol}: {broker_min_stops} points.")
 
-    # Safeguard: If broker reports 0, use a safe fallback value.
-    if stops_level == 0:
-        distance_for_test = 15  # Using a safe, hard-coded fallback of 15 points
-        print(f"Broker reported 0, using a safe fallback distance of {distance_for_test} points.")
+    # Safeguard: If broker reports 0, use our configurable fallback value.
+    if broker_min_stops == 0:
+        distance_for_test = FALLBACK_STOP_DISTANCE_UNITS
+        print(f"Broker reported 0, using configured fallback distance of {distance_for_test} points.")
     else:
-        distance_for_test = stops_level
+        distance_for_test = broker_min_stops
 
     # Set TP/SL using the determined valid distance
     tp = price + distance_for_test * point

@@ -12,6 +12,14 @@ SYMBOLS = {
     "2": "XAUUSD"
 }
 
-# Trading parameters
+# --- Stop Loss and Take Profit ---
+# The distance in points for your Stop Loss and Take Profit.
 TP_SL_UNITS = 50
+
+# ** IMPORTANT **
+# Fallback for when the broker reports an invalid minimum stop distance (0).
+# If you still get 'Invalid stops' errors, INCREASE this value.
+FALLBACK_STOP_DISTANCE_UNITS = 50
+
+# --- Other Settings ---
 MAGIC_NUMBER = 12345
