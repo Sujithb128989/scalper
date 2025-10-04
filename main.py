@@ -7,7 +7,7 @@ from config import SYMBOLS, MAGIC_NUMBER, TP_SL_UNITS, MAX_TRADES
 
 def main():
     """
-    Main function to run the multi-trade trading bot.
+    Main function to run the multi-trade, margin-aware trading bot.
     """
     if not initialize_mt5():
         return
@@ -40,12 +40,10 @@ def main():
 
             if len(positions) > 0:
                 for pos in list(positions):
-                    # Use pos.profit to get P/L directly in account currency
                     profit_in_currency = pos.profit
-
                     print(f"[MONITOR] Position #{pos.ticket}, P/L: ${profit_in_currency:.2f}")
 
-                    if profit_in_currency >= TP_SL_UNITS or profit_in_currency <= -TP_SL_UNITS:
+                    if abs(profit_in_currency) >= TP_SL_UNITS:
                         print(f"[TARGET HIT] Position #{pos.ticket} P/L is ${profit_in_currency:.2f}. Closing trade.")
                         close_trade(pos)
 
@@ -55,17 +53,15 @@ def main():
 
             if num_open_trades < MAX_TRADES:
                 print("Checking for new trade signals...")
-                signal_5m = check_5m_strategy(selected_symbol)
-                if signal_5m:
-                    print(f"[SIGNAL] 5m signal found: {signal_5m}. Opening new trade.")
-                    open_trade(signal_5m, selected_symbol)
+                signal = check_5m_strategy(selected_symbol) or check_1m_strategy(selected_symbol)
+
+                if signal:
+                    print(f"[SIGNAL] Found {signal} signal. Attempting to open new trade.")
+                    result = open_trade(signal, selected_symbol)
+                    if result is None:
+                        print("[INFO] Trade could not be opened, likely due to insufficient margin. Waiting for a position to close.")
                 else:
-                    signal_1m = check_1m_strategy(selected_symbol)
-                    if signal_1m:
-                        print(f"[SIGNAL] 1m signal found: {signal_1m}. Opening new trade.")
-                        open_trade(signal_1m, selected_symbol)
-                    else:
-                        print("No trade signal found.")
+                    print("No trade signal found.")
             else:
                 print("Position limit reached. Not checking for new signals.")
 

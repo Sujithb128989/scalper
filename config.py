@@ -17,6 +17,9 @@ SYMBOLS = {
 LOT_SIZE = 1.0
 
 # The maximum number of simultaneous trades the bot can have open.
+# NOTE: Your ability to open this many trades is limited by your account's
+# free margin. For the test script to pass, you may need to set this
+# to a lower number (e.g., 3) depending on your account size.
 MAX_TRADES = 10
 
 # The Take Profit and Stop Loss target in your account's currency (e.g., USD).

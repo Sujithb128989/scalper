@@ -2,32 +2,61 @@ import MetaTrader5 as mt5
 from config import MAGIC_NUMBER, LOT_SIZE
 from mt5_connector import get_symbol_info
 
+def has_sufficient_margin(action, symbol, lot_size):
+    """
+    Checks if the account has enough free margin to open a trade.
+    """
+    # Get account margin information
+    account_info = mt5.account_info()
+    if account_info is None:
+        print("Failed to get account info.")
+        return False
+
+    free_margin = account_info.margin_free
+
+    # Calculate required margin for the trade
+    required_margin = mt5.order_calc_margin(
+        mt5.ORDER_TYPE_BUY if action == 'buy' else mt5.ORDER_TYPE_SELL,
+        symbol,
+        lot_size
+    )
+
+    if required_margin is None:
+        print(f"order_calc_margin failed, error code = {mt5.last_error()}")
+        return False
+
+    print(f"Margin Check: Required=${required_margin:.2f}, Available=${free_margin:.2f}")
+
+    if free_margin >= required_margin:
+        return True
+    else:
+        return False
+
 def open_trade(action, symbol):
     """
     Opens a trade with the specified action ('buy' or 'sell')
-    using the lot size defined in the config.
+    after verifying sufficient margin.
     """
     print(f"Attempting to open a {action} trade for {symbol}...")
 
-    symbol_info = get_symbol_info(symbol)
-    if symbol_info is None:
-        print(f"Trade failed: Could not get symbol info for {symbol}.")
-        return None
+    # --- 1. Pre-trade margin check ---
+    if not has_sufficient_margin(action, symbol, LOT_SIZE):
+        print(f"Trade failed: Not enough free margin to open a {LOT_SIZE} lot trade on {symbol}.")
+        return None # Indicate failure due to margin
 
-    # Use the lot size from the config file
-    lot_size = LOT_SIZE
+    # --- 2. Open the trade if margin is sufficient ---
     price = mt5.symbol_info_tick(symbol).ask if action == 'buy' else mt5.symbol_info_tick(symbol).bid
     trade_type = mt5.ORDER_TYPE_BUY if action == 'buy' else mt5.ORDER_TYPE_SELL
 
-    print(f"Trade Details: Lot={lot_size}, Price={price:.5f}")
+    print(f"Trade Details: Lot={LOT_SIZE}, Price={price:.5f}")
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
-        "volume": lot_size,
+        "volume": LOT_SIZE,
         "type": trade_type,
         "price": price,
-        "sl": 0.0,  # SL/TP are not set at trade opening
+        "sl": 0.0,
         "tp": 0.0,
         "magic": MAGIC_NUMBER,
         "comment": "python bot open",
@@ -49,11 +78,10 @@ def close_trade(position):
     """
     symbol = position.symbol
 
-    # Determine the closing order type and price
     if position.type == mt5.ORDER_TYPE_BUY:
         close_type = mt5.ORDER_TYPE_SELL
         price = mt5.symbol_info_tick(symbol).bid
-    else: # position.type == mt5.ORDER_TYPE_SELL
+    else:
         close_type = mt5.ORDER_TYPE_BUY
         price = mt5.symbol_info_tick(symbol).ask
 
