@@ -14,12 +14,18 @@ def has_sufficient_margin(action, symbol, lot_size):
 
     free_margin = account_info.margin_free
 
+    # Get the current price, which is required for margin calculation
+    price = mt5.symbol_info_tick(symbol).ask if action == 'buy' else mt5.symbol_info_tick(symbol).bid
+
     # Calculate required margin for the trade
-    required_margin = mt5.order_calc_margin(
-        mt5.ORDER_TYPE_BUY if action == 'buy' else mt5.ORDER_TYPE_SELL,
-        symbol,
-        lot_size
-    )
+    request = {
+        "action": mt5.ORDER_TYPE_BUY if action == 'buy' else mt5.ORDER_TYPE_SELL,
+        "symbol": symbol,
+        "volume": lot_size,
+        "price": price,
+    }
+
+    required_margin = mt5.order_calc_margin(request['action'], symbol, lot_size, price)
 
     if required_margin is None:
         print(f"order_calc_margin failed, error code = {mt5.last_error()}")
