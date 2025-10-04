@@ -1,17 +1,17 @@
 import time
 import MetaTrader5 as mt5
-from mt5_connector import initialize_mt5, shutdown_mt5
+from mt5_connector import initialize_mt5, shutdown_mt5, get_symbol_info
 from trader import open_trade, close_trade
-from config import MAGIC_NUMBER, MAX_TRADES
+from config import MAGIC_NUMBER, MAX_TRADES, TP_SL_UNITS
 
-def run_multi_trade_test():
+def run_live_monitoring_test():
     """
-    Connects to MT5 and performs a multi-trade stress test:
-    1. Opens the MAX_TRADES number of trades.
-    2. Verifies they are all open.
-    3. Closes all of them.
+    Connects to MT5 and performs a live monitoring test:
+    1. Opens MAX_TRADES number of trades.
+    2. Enters a loop to monitor and close them based on TP/SL.
+    3. The test completes when all initial trades have been closed.
     """
-    print(f"--- Running Multi-Trade Test Script (Target: {MAX_TRADES} trades) ---")
+    print(f"--- Running Live Monitoring Test Script (Target: {MAX_TRADES} trades) ---")
     if not initialize_mt5():
         print("[TEST FAILED] Could not initialize MT5 connection.")
         return
@@ -25,37 +25,55 @@ def run_multi_trade_test():
         open_trade('buy', symbol)
         time.sleep(0.2) # Small delay between requests
 
-    # --- Step 2: Verify all trades are open ---
-    positions = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
-    if positions is None:
-        print("[TEST FAILED] Could not retrieve positions from server.")
+    # --- Step 2: Verify trades are open ---
+    initial_positions = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
+    if initial_positions is None or len(initial_positions) != MAX_TRADES:
+        print(f"[TEST FAILED] Expected {MAX_TRADES} trades, but found {len(initial_positions or [])}. Aborting.")
         shutdown_mt5()
         return
 
-    num_opened = len(positions)
-    print(f"Verification: {num_opened}/{MAX_TRADES} trades were successfully opened.")
-    if num_opened == 0:
-        print("[TEST FAILED] No trades were opened.")
+    print(f"Successfully opened {len(initial_positions)} trades. Entering live monitoring mode...")
+    print("This test will run until all positions are closed by hitting the +/- {TP_SL_UNITS} unit target.")
+
+    # --- Step 3: Monitor until all trades are closed ---
+    try:
+        while True:
+            positions = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
+            if positions is None:
+                print("Could not get position data. Retrying...")
+                time.sleep(1)
+                continue
+
+            # Exit condition for the test
+            if len(positions) == 0:
+                print("[TEST SUCCESS] All initial positions have been successfully closed.")
+                break
+
+            print(f"--- Monitoring {len(positions)} open positions ---")
+            point = get_symbol_info(symbol).point
+
+            for pos in list(positions):
+                if pos.type == mt5.ORDER_TYPE_BUY:
+                    current_price = mt5.symbol_info_tick(symbol).bid
+                    profit_in_points = (current_price - pos.price_open) / point
+                else: # pos.type == mt5.ORDER_TYPE_SELL
+                    current_price = mt5.symbol_info_tick(symbol).ask
+                    profit_in_points = (pos.price_open - current_price) / point
+
+                print(f"[MONITOR] Position #{pos.ticket}, P/L: {profit_in_points:.2f} points")
+
+                if abs(profit_in_points) >= TP_SL_UNITS:
+                    print(f"[TARGET HIT] Position #{pos.ticket} P/L is {profit_in_points:.2f}. Closing trade.")
+                    close_trade(pos)
+
+            time.sleep(1) # Loop every second for active monitoring
+
+    except KeyboardInterrupt:
+        print("\nTest stopped by user.")
+    finally:
+        # --- Clean up ---
         shutdown_mt5()
-        return
-
-    # --- Step 3: Close all open trades ---
-    print(f"Attempting to close all {num_opened} open trades...")
-    # We convert to a list because closing a position modifies the collection we are iterating over
-    for pos in list(positions):
-        close_trade(pos)
-        time.sleep(0.2) # Small delay between requests
-
-    # --- Step 4: Final Verification ---
-    final_positions = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
-    if final_positions is None or len(final_positions) == 0:
-        print(f"[TEST SUCCESS] Successfully opened {num_opened} trades and closed them all.")
-    else:
-        print(f"[TEST FAILED] {len(final_positions)} trades remain open after attempting to close all.")
-
-    # --- Clean up ---
-    shutdown_mt5()
-    print("--- Test Script Finished ---")
+        print("--- Test Script Finished ---")
 
 if __name__ == "__main__":
-    run_multi_trade_test()
+    run_live_monitoring_test()
