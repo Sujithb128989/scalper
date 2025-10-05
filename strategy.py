@@ -8,8 +8,6 @@ from mt5_connector import get_market_data
 def is_fractal(df, i, lookback=2, fractal_type='resistance'):
     """
     Checks if a candle at index `i` is a fractal.
-    A resistance fractal's high is higher than the `lookback` candles on both sides.
-    A support fractal's low is lower than the `lookback` candles on both sides.
     """
     if i < lookback or i > len(df) - 1 - lookback:
         return False
@@ -45,8 +43,6 @@ def get_fractal_levels(df, lookback=5):
 def check_break_of_structure(df, lookback=15):
     """
     Checks for a Break of Structure (BOS).
-    Returns 'bullish' if a recent swing high is broken.
-    Returns 'bearish' if a recent swing low is broken.
     """
     recent_high = df['high'].iloc[-lookback:-1].max()
     recent_low = df['low'].iloc[-lookback:-1].min()
@@ -58,97 +54,60 @@ def check_break_of_structure(df, lookback=15):
         return 'bearish'
     return None
 
-# --- UPGRADED TRADING STRATEGIES ---
+# --- REFACTORED STRATEGIES (Level Finders) ---
 
-def check_5m_strategy(symbol):
+def find_fractal_levels_5m(symbol):
     """
-    UPGRADED 5m STRATEGY: Fractal-Based Support/Resistance
-    Identifies significant S/R levels using fractals and enters on a touch.
+    Finds all valid fractal support and resistance levels on the 5m chart.
+    Returns two lists: (supports, resistances).
     """
     rates = get_market_data(symbol, mt5.TIMEFRAME_M5, 200)
     if rates is None or len(rates) < 50:
-        return None
+        return [], []
 
     df = pd.DataFrame(rates)
-    supports, resistances = get_fractal_levels(df.iloc[-50:]) # Check last 50 candles for levels
+    supports, resistances = get_fractal_levels(df.iloc[-100:]) # Check last 100 candles
 
-    if not supports and not resistances:
-        print("[5m LOG] No fractal S/R levels found in the last 50 candles.")
-        return None
+    print(f"[5m Strategy] Found {len(supports)} support levels and {len(resistances)} resistance levels.")
+    return supports, resistances
 
-    current_price = df['close'].iloc[-1]
-    point = mt5.symbol_info(symbol).point
-
-    # Find the closest support and resistance levels
-    closest_support = min(supports, key=lambda x: abs(x - current_price)) if supports else None
-    closest_resistance = min(resistances, key=lambda x: abs(x - current_price)) if resistances else None
-
-    print(f"[5m LOG] Price: {current_price:.5f} | Closest Support: {closest_support or 'N/A'} | Closest Resistance: {closest_resistance or 'N/A'}")
-
-    # Entry Logic: Trade if price is very close to a fractal level
-    if closest_support and abs(current_price - closest_support) < (10 * point):
-        print(f"[5m SIGNAL] Price is near fractal support. BUY signal.")
-        return 'buy'
-    if closest_resistance and abs(current_price - closest_resistance) < (10 * point):
-        print(f"[5m SIGNAL] Price is near fractal resistance. SELL signal.")
-        return 'sell'
-
-    return None
-
-def check_1m_strategy(symbol):
+def find_qualified_fvg_levels_1m(symbol):
     """
-    UPGRADED 1m STRATEGY: Qualified Fair Value Gap (FVG) with Break of Structure (BOS)
-    Requires both an FVG and a confirming BOS before entering.
+    Finds qualified FVG levels on the 1m chart that are confirmed by a BOS.
+    Returns two lists: (buy_levels, sell_levels).
     """
     rates = get_market_data(symbol, mt5.TIMEFRAME_M1, 30)
     if rates is None or len(rates) < 20:
-        return None
+        return [], []
 
     df = pd.DataFrame(rates)
     point = mt5.symbol_info(symbol).point
-    min_gap_size = 3 * point  # FVG must be at least 3 points wide
+    min_gap_size = 3 * point
 
-    # --- 1. Check for a recent Break of Structure (BOS) ---
     bos_direction = check_break_of_structure(df, lookback=15)
     if not bos_direction:
-        print("[1m LOG] No recent Break of Structure found.")
-        return None
+        return [], []
 
-    print(f"[1m LOG] Found a {bos_direction} Break of Structure.")
+    print(f"[1m Strategy] Found a {bos_direction} Break of Structure.")
 
-    # --- 2. Find the most recent FVG that aligns with the BOS ---
-    fvg_level = None
+    buy_levels, sell_levels = [], []
     if bos_direction == 'bullish':
-        # Look for a bullish FVG (gap between high of i-2 and low of i)
         for i in range(len(df) - 3, 2, -1):
             gap_bottom = df['high'].iloc[i-2]
             gap_top = df['low'].iloc[i]
             if gap_top > gap_bottom and (gap_top - gap_bottom) >= min_gap_size:
                 fvg_level = (gap_top + gap_bottom) / 2
-                print(f"[1m LOG] Found Bullish FVG with mid-point at {fvg_level:.5f}")
-                break # Use the most recent one
+                buy_levels.append(fvg_level)
+                print(f"[1m Strategy] Found Bullish FVG level at {fvg_level:.5f}")
+                # We can add multiple levels if they exist
 
     elif bos_direction == 'bearish':
-        # Look for a bearish FVG (gap between low of i-2 and high of i)
         for i in range(len(df) - 3, 2, -1):
             gap_top = df['low'].iloc[i-2]
             gap_bottom = df['high'].iloc[i]
             if gap_top > gap_bottom and (gap_top - gap_bottom) >= min_gap_size:
                 fvg_level = (gap_top + gap_bottom) / 2
-                print(f"[1m LOG] Found Bearish FVG with mid-point at {fvg_level:.5f}")
-                break # Use the most recent one
+                sell_levels.append(fvg_level)
+                print(f"[1m Strategy] Found Bearish FVG level at {fvg_level:.5f}")
 
-    if not fvg_level:
-        print("[1m LOG] No FVG found aligning with the BOS.")
-        return None
-
-    # --- 3. Entry Logic: Trade if price retraces to the FVG's 50% level ---
-    current_price = df['close'].iloc[-1]
-    if bos_direction == 'bullish' and current_price <= fvg_level:
-        print(f"[1m SIGNAL] Price has retraced to bullish FVG level. BUY signal.")
-        return 'buy'
-    if bos_direction == 'bearish' and current_price >= fvg_level:
-        print(f"[1m SIGNAL] Price has retraced to bearish FVG level. SELL signal.")
-        return 'sell'
-
-    return None
+    return buy_levels, sell_levels
