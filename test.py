@@ -2,15 +2,12 @@ import time
 import MetaTrader5 as mt5
 from mt5_connector import initialize_mt5, shutdown_mt5, get_symbol_info
 from trader import open_trade, close_trade
-from config import MAGIC_NUMBER, MAX_TRADES, TP_SL_UNITS, LOT_SIZE
+from config import MAGIC_NUMBER, MAX_TRADES, TP_SL_UNITS, LOT_SIZES
 
 def run_live_monitoring_test():
     """
-    Connects to MT5 and performs a robust live monitoring test:
-    1. Attempts to open up to MAX_TRADES.
-    2. Proceeds if at least one trade was opened.
-    3. Enters a loop to monitor and close them based on TP/SL.
-    4. The test succeeds when all opened trades have been closed.
+    Connects to MT5 and performs a robust live monitoring test using
+    the per-symbol lot size configuration.
     """
     print(f"--- Running Robust Live Monitoring Test Script ---")
     if not initialize_mt5():
@@ -18,9 +15,14 @@ def run_live_monitoring_test():
         return
 
     symbol = "BTCUSDm"
+    lot_size = LOT_SIZES.get(symbol)
+    if not lot_size:
+        print(f"[TEST FAILED] No lot size configured for symbol '{symbol}' in config.py.")
+        shutdown_mt5()
+        return
 
     # --- Step 1: Attempt to open trades ---
-    print(f"Attempting to open up to {MAX_TRADES} trades of {LOT_SIZE} lots each...")
+    print(f"Attempting to open up to {MAX_TRADES} trades of {lot_size} lots each for {symbol}...")
     for i in range(MAX_TRADES):
         print(f"Attempting to open trade {i + 1}/{MAX_TRADES}...")
         open_trade('buy', symbol)
