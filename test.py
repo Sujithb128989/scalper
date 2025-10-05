@@ -1,74 +1,65 @@
 import time
 import MetaTrader5 as mt5
-from mt5_connector import initialize_mt5, shutdown_mt5, get_symbol_info
+from mt5_connector import initialize_mt5, shutdown_mt5
 from trader import open_trade, close_trade
-from signal_manager import SignalManager
 from strategy import find_fractal_levels_5m, find_qualified_fvg_levels_1m
-from config import MAGIC_NUMBER, TP_SL_UNITS, LOT_SIZES
+from config import MAGIC_NUMBER, TP_SL_UNITS, MAX_TRADES, LOT_SIZES
 
-def run_end_to_end_test():
+def run_full_stress_test():
     """
-    Connects to MT5 and performs a full, end-to-end integration test.
-    This version correctly handles the single-dictionary return from strategies.
+    Performs the user-defined stress test:
+    1. Finds and displays all potential trade levels for verification.
+    2. Immediately attempts to open MAX_TRADES positions.
+    3. Live-monitors all opened trades until they are closed by the P/L logic.
     """
-    print(f"--- Running Full End-to-End Test Script ---")
+    print(f"--- Running Full Stress Test ---")
     if not initialize_mt5():
         print("[TEST FAILED] Could not initialize MT5 connection.")
         return
 
     symbol = "BTCUSDm"
-    signal_manager = SignalManager()
+    lot_size = LOT_SIZES.get(symbol)
 
-    # --- Step 1: Populate Signal Manager with initial levels ---
-    print("\n--- Populating Signal Manager with initial levels... ---")
-    # Correctly handle the single dictionary returned by the strategy functions
+    # --- Step 1: Find and display levels for verification ---
+    print("\n--- Finding all potential strategy levels... ---")
     fractal_levels = find_fractal_levels_5m(symbol)
-    signal_manager.update_levels(fractal_levels)
-
     fvg_levels = find_qualified_fvg_levels_1m(symbol)
-    signal_manager.update_levels(fvg_levels)
+    print(f"Found {len(fractal_levels)} fractal levels: {fractal_levels}")
+    print(f"Found {len(fvg_levels)} FVG levels: {fvg_levels}")
 
-    if not signal_manager.levels:
-        print("[TEST SKIPPED] No initial trade levels found. Cannot perform live test.")
+    # --- Step 2: Immediately attempt to open trades ---
+    print(f"\n--- Stress Test: Attempting to open up to {MAX_TRADES} trades of {lot_size} lots... ---")
+    for i in range(MAX_TRADES):
+        print(f"Attempting to open trade {i + 1}/{MAX_TRADES}...")
+        open_trade('buy', symbol)
+        time.sleep(0.2)
+
+    # --- Step 3: Verify trades and enter monitoring loop ---
+    initial_positions = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
+    num_opened = len(initial_positions or [])
+
+    if num_opened == 0:
+        print("[TEST FAILED] Could not open a single trade. Please check account margin or logs.")
         shutdown_mt5()
         return
 
-    print(f"\n--- Entering Live Monitoring Mode. Waiting for a level to be hit... ---")
+    print(f"\nSuccessfully opened {num_opened} trades. Entering live monitoring mode...")
+    print(f"This test will run until all {num_opened} positions are closed by hitting the +/- ${TP_SL_UNITS} target.")
 
-    trade_opened = False
     try:
         while True:
-            # --- Step 2 & 3: Wait for a signal and open ONE trade ---
-            if not trade_opened:
-                price = mt5.symbol_info_tick(symbol).bid
-                point = get_symbol_info(symbol).point
-                signal = signal_manager.check_for_signal(price, point)
+            positions = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
+            if not positions:
+                print(f"\n[TEST SUCCESS] All {num_opened} initial positions have been successfully closed.")
+                break
 
-                if signal:
-                    print(f"\n--- Level Hit! Opening one '{signal}' trade to test management. ---")
-                    result = open_trade(signal, symbol)
-                    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                        trade_opened = True
-                        print("\n--- Trade Opened. Now monitoring P/L until target is hit... ---")
-                    else:
-                        print("[TEST FAILED] Failed to open trade after signal was triggered.")
-                        break
+            print(f"--- Monitoring {len(positions)} open positions ---", end='\r')
 
-            # --- Step 4 & 5: Monitor the single open trade and close on target ---
-            if trade_opened:
-                positions = mt5.positions_get(symbol=symbol, magic=MAGIC_NUMBER)
-                if not positions:
-                    print("[TEST SUCCESS] Position was successfully closed by the P/L logic.")
-                    break
-
-                position = positions[0]
-                profit = position.profit
-                print(f"[MONITOR] Position #{position.ticket}, P/L: ${profit:.2f}", end='\r')
-
+            for pos in list(positions):
+                profit = pos.profit
                 if abs(profit) >= TP_SL_UNITS:
-                    print(f"\n[TARGET HIT] Position #{position.ticket} P/L is ${profit:.2f}. Closing trade.")
-                    close_trade(position)
-                    time.sleep(2) # Give time for server to confirm close
+                    print(f"\n[TARGET HIT] Position #{pos.ticket} P/L is ${profit:.2f}. Closing trade.")
+                    close_trade(pos)
 
             time.sleep(1)
 
@@ -77,7 +68,7 @@ def run_end_to_end_test():
     finally:
         # --- Clean up ---
         shutdown_mt5()
-        print("--- Test Script Finished ---")
+        print("\n--- Test Script Finished ---")
 
 if __name__ == "__main__":
-    run_end_to_end_test()
+    run_full_stress_test()
