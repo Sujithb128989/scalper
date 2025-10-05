@@ -1,48 +1,43 @@
 class SignalManager:
     """
-    Manages the storage and checking of active trading levels.
-    This class decouples the slow signal generation from fast price checking.
+    Manages the storage and checking of active trading levels using a
+    more efficient key-value structure as designed by the user.
     """
     def __init__(self):
-        # Using sets for efficient add/remove and to avoid duplicates
-        self.levels = {
-            'buy': set(),
-            'sell': set()
-        }
-        print("Signal Manager initialized.")
+        # A single dictionary where: {price_level: 'buy'/'sell'}
+        self.levels = {}
+        print("Signal Manager initialized with new key-value structure.")
 
-    def update_levels(self, new_buy_levels=None, new_sell_levels=None):
+    def update_levels(self, new_levels_dict):
         """
-        Updates the internal sets with new levels from the strategies.
+        Updates the internal dictionary with new levels from the strategies.
+        new_levels_dict should be in the format {level: type}.
         """
-        if new_buy_levels:
-            self.levels['buy'].update(new_buy_levels)
-        if new_sell_levels:
-            self.levels['sell'].update(new_sell_levels)
+        if new_levels_dict:
+            self.levels.update(new_levels_dict)
 
-        print(f"[Signal Manager] Levels updated. Total Buy Levels: {len(self.levels['buy'])}, Total Sell Levels: {len(self.levels['sell'])}")
+        print(f"[Signal Manager] Levels updated. Total active levels: {len(self.levels)}")
 
     def check_for_signal(self, current_price, point):
         """
         Checks if the current price is touching any of the stored levels.
-        Returns 'buy' or 'sell' if a level is hit, otherwise None.
+        Returns the trade type ('buy' or 'sell') if a level is hit, otherwise None.
         Removes the level after it's been hit to prevent re-triggering.
         """
-        # A small tolerance to detect a "touch"
         tolerance = 10 * point
+        level_to_trade = None
+        trade_type = None
 
-        # Check for buy signals (price touching a support level)
-        for level in list(self.levels['buy']):
+        for level, t_type in self.levels.items():
             if abs(current_price - level) < tolerance:
-                print(f"[Signal Manager] BUY signal triggered at support level {level:.5f}")
-                self.levels['buy'].remove(level) # Use level once
-                return 'buy'
+                print(f"[Signal Manager] {t_type.upper()} signal triggered at level {level:.5f}")
+                level_to_trade = level
+                trade_type = t_type
+                break # Found a level, stop checking
 
-        # Check for sell signals (price touching a resistance level)
-        for level in list(self.levels['sell']):
-            if abs(current_price - level) < tolerance:
-                print(f"[Signal Manager] SELL signal triggered at resistance level {level:.5f}")
-                self.levels['sell'].remove(level) # Use level once
-                return 'sell'
+        # Remove the level outside the loop to avoid modifying dict while iterating
+        if level_to_trade:
+            del self.levels[level_to_trade]
+            return trade_type
 
         return None

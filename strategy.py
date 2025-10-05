@@ -28,18 +28,6 @@ def is_fractal(df, i, lookback=2, fractal_type='resistance'):
 
     return False
 
-def get_fractal_levels(df, lookback=5):
-    """
-    Identifies all fractal support and resistance levels in the dataframe.
-    """
-    supports, resistances = [], []
-    for i in range(len(df)):
-        if is_fractal(df, i, lookback=2, fractal_type='support'):
-            supports.append(df['low'].iloc[i])
-        if is_fractal(df, i, lookback=2, fractal_type='resistance'):
-            resistances.append(df['high'].iloc[i])
-    return supports, resistances
-
 def check_break_of_structure(df, lookback=15):
     """
     Checks for a Break of Structure (BOS).
@@ -58,48 +46,54 @@ def check_break_of_structure(df, lookback=15):
 
 def find_fractal_levels_5m(symbol):
     """
-    Finds all valid fractal support and resistance levels on the 5m chart.
-    Returns two lists: (supports, resistances).
+    Finds all valid fractal levels and returns them in a single dictionary.
+    Returns: {level: 'buy'/'sell'}
     """
     rates = get_market_data(symbol, mt5.TIMEFRAME_M5, 200)
     if rates is None or len(rates) < 50:
-        return [], []
+        return {}
 
     df = pd.DataFrame(rates)
-    supports, resistances = get_fractal_levels(df.iloc[-100:]) # Check last 100 candles
+    levels = {}
 
-    print(f"[5m Strategy] Found {len(supports)} support levels and {len(resistances)} resistance levels.")
-    return supports, resistances
+    # Check last 100 candles for levels
+    for i in range(len(df) - 100, len(df)):
+        if is_fractal(df, i, lookback=2, fractal_type='support'):
+            levels[df['low'].iloc[i]] = 'buy'
+        if is_fractal(df, i, lookback=2, fractal_type='resistance'):
+            levels[df['high'].iloc[i]] = 'sell'
+
+    print(f"[5m Strategy] Found {len(levels)} total fractal levels.")
+    return levels
 
 def find_qualified_fvg_levels_1m(symbol):
     """
-    Finds qualified FVG levels on the 1m chart that are confirmed by a BOS.
-    Returns two lists: (buy_levels, sell_levels).
+    Finds qualified FVG levels confirmed by a BOS and returns them in a single dictionary.
+    Returns: {level: 'buy'/'sell'}
     """
     rates = get_market_data(symbol, mt5.TIMEFRAME_M1, 30)
     if rates is None or len(rates) < 20:
-        return [], []
+        return {}
 
     df = pd.DataFrame(rates)
     point = mt5.symbol_info(symbol).point
     min_gap_size = 3 * point
+    levels = {}
 
     bos_direction = check_break_of_structure(df, lookback=15)
     if not bos_direction:
-        return [], []
+        return {}
 
     print(f"[1m Strategy] Found a {bos_direction} Break of Structure.")
 
-    buy_levels, sell_levels = [], []
     if bos_direction == 'bullish':
         for i in range(len(df) - 3, 2, -1):
             gap_bottom = df['high'].iloc[i-2]
             gap_top = df['low'].iloc[i]
             if gap_top > gap_bottom and (gap_top - gap_bottom) >= min_gap_size:
                 fvg_level = (gap_top + gap_bottom) / 2
-                buy_levels.append(fvg_level)
+                levels[fvg_level] = 'buy'
                 print(f"[1m Strategy] Found Bullish FVG level at {fvg_level:.5f}")
-                # We can add multiple levels if they exist
 
     elif bos_direction == 'bearish':
         for i in range(len(df) - 3, 2, -1):
@@ -107,7 +101,7 @@ def find_qualified_fvg_levels_1m(symbol):
             gap_bottom = df['high'].iloc[i]
             if gap_top > gap_bottom and (gap_top - gap_bottom) >= min_gap_size:
                 fvg_level = (gap_top + gap_bottom) / 2
-                sell_levels.append(fvg_level)
+                levels[fvg_level] = 'sell'
                 print(f"[1m Strategy] Found Bearish FVG level at {fvg_level:.5f}")
 
-    return buy_levels, sell_levels
+    return levels
